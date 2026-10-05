@@ -22,16 +22,8 @@ export async function middleware(request: NextRequest) {
       },
     }
   )
-
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user && request.nextUrl.pathname.startsWith('/cart')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
-  }
-
+  await supabase.auth.getUser()
   return response
 }
 
-export const config = { matcher: ['/cart', '/chat', '/admin'] }
+export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'] }
