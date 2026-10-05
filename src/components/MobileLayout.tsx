@@ -1,43 +1,28 @@
 import { createClient } from "@/lib/supabase/server";
 import BottomNav from "./BottomNav";
 import SplashScreen from "./SplashScreen";
-import Link from "next/link";
+import Header from "./Header";
 
 export default async function MobileLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { data: profile } = user ? await supabase.from('profiles').select('is_admin').eq('id', user.id).single() : { data: null };
+  
+  // Fetch user role to determine admin status
+  const profile = user 
+    ? (await supabase.from('profiles').select('role').eq('id', user.id).single()).data 
+    : null;
+  const isAdmin = profile?.role === 'admin';
 
   return (
-    <div className="app-container">
+    <div className="app-shell">
       <SplashScreen />
-      
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center">
-        <Link href="/" className="text-xl font-bold bg-gradient-to-r from-amber-500 to-orange-600 bg-clip-text text-transparent">
-          SHOPER
-        </Link>
-        <div className="flex gap-3">
-          {user && profile?.is_admin && (
-            <Link href="/admin" className="text-xs font-semibold text-red-600">Admin</Link>
-          )}
-          {user ? (
-            <Link href="/profile" className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold">
-              {user.email?.[0].toUpperCase()}
-            </Link>
-          ) : (
-            <Link href="/login" className="text-sm font-semibold text-amber-600">Login</Link>
-          )}
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pb-20">
+      <Header user={user} isAdmin={isAdmin} />
+      <main className="flex-1 overflow-y-auto pb-24">
         {children}
       </main>
-
-      {/* Bottom Navigation */}
-      {user && <BottomNav />}
+      
+      {/* Pass isAdmin prop to BottomNav */}
+      {user && <BottomNav isAdmin={isAdmin} />}
     </div>
   );
 }
