@@ -1,11 +1,10 @@
 'use client';
-
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 export default function Login() {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [mode, setMode] = useState<'login' | 'signup' | 'guest'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -18,119 +17,82 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    
-    if (isSignUp) {
-      const { data, error } = await supabase.auth.signUp({
-        email, 
-        password,
-        options: { 
-          data: { 
-            full_name: fullName, 
-            username: email.split('@')[0] 
-          }
-        }
-      });
-      
-      if (error) {
-        setError(error.message);
-      } else if (data.user && !data.session) {
-        setError('Please check your email to confirm your account.');
+    try {
+      if (mode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email, password,
+          options: { data: { full_name: fullName, username: email.split('@')[0] } }
+        });
+        if (error) setError(error.message);
+        else { router.push('/'); router.refresh(); }
       } else {
-        router.push('/');
-        router.refresh();
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) setError(error.message);
+        else { router.push('/'); router.refresh(); }
       }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setError(error.message);
-      } else {
-        router.push('/');
-        router.refresh();
-      }
-    }
+    } finally { setLoading(false); }
+  };
+
+  const handleGuest = async () => {
+    setLoading(true);
+    const guestEmail = `guest_${Date.now()}@shoper.app`;
+    const guestPass = 'guest123456';
+    const { error } = await supabase.auth.signUp({
+      email: guestEmail, password: guestPass,
+      options: { data: { full_name: 'Guest User', username: 'guest' } }
+    });
     setLoading(false);
+    if (error) setError(error.message);
+    else { router.push('/'); router.refresh(); }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
-      <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-500 to-orange-600 bg-clip-text text-transparent mb-2">
-            SHOPER
-          </h1>
-          <p className="text-gray-600">
-            {isSignUp ? 'Join our global marketplace' : 'Welcome back to Shoper'}
-          </p>
+    <div className="p-6 min-h-full flex flex-col justify-center">
+      <div className="mb-8 text-center">
+        <div className="inline-flex w-16 h-16 rounded-2xl gold-gradient items-center justify-center mb-4 shadow-lg shadow-gold-500/30">
+          <svg className="w-9 h-9 text-dark-900" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
         </div>
+        <h1 className="text-3xl font-bold gold-text">Welcome to Shoper</h1>
+        <p className="text-gray-400 mt-2 text-sm">Premium global shopping experience</p>
+      </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-            {error}
-          </div>
-        )}
-
+      {mode !== 'guest' && (
         <form onSubmit={handleSubmit} className="space-y-4">
-          {isSignUp && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-              <input
-                type="text"
-                placeholder="John Doe"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
-                required
-              />
-            </div>
+          {mode === 'signup' && (
+            <input type="text" placeholder="Full Name" value={fullName} onChange={e => setFullName(e.target.value)} className="input-dark" required />
           )}
+          <input type="email" placeholder="Email Address" value={email} onChange={e => setEmail(e.target.value)} className="input-dark" required />
+          <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} className="input-dark" required minLength={6} />
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-            <input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
-              required
-            />
-          </div>
+          {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">{error}</div>}
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all"
-              required
-              minLength={6}
-            />
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-amber-500 to-orange-600 text-white font-semibold py-3 px-6 rounded-xl hover:from-amber-600 hover:to-orange-700 transform hover:scale-[1.02] transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Please wait...' : (isSignUp ? 'Create Account' : 'Sign In')}
+          <button type="submit" disabled={loading} className="btn-gold w-full disabled:opacity-50">
+            {loading ? 'Please wait...' : (mode === 'signup' ? 'Create Account' : 'Sign In')}
           </button>
         </form>
+      )}
 
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            {isSignUp ? 'Already have an account?' : "Don't have an account?"}
-            <button
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError('');
-              }}
-              className="ml-2 text-amber-600 font-semibold hover:text-amber-700 transition-colors"
-            >
-              {isSignUp ? 'Sign In' : 'Sign Up'}
-            </button>
-          </p>
+      <div className="mt-6 space-y-3">
+        <button onClick={handleGuest} disabled={loading} className="btn-outline-gold w-full disabled:opacity-50 flex items-center justify-center gap-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+          Continue as Guest
+        </button>
+        
+        <div className="flex items-center gap-3 my-4">
+          <div className="flex-1 h-px bg-dark-600" />
+          <span className="text-xs text-gray-500">OR</span>
+          <div className="flex-1 h-px bg-dark-600" />
+        </div>
+
+        <div className="text-center text-sm text-gray-400">
+          {mode === 'login' ? (
+            <>New to Shoper? <button onClick={() => { setMode('signup'); setError(''); }} className="text-gold-500 font-semibold">Create account</button></>
+          ) : (
+            <>Already have an account? <button onClick={() => { setMode('login'); setError(''); }} className="text-gold-500 font-semibold">Sign in</button></>
+          )}
         </div>
       </div>
     </div>
