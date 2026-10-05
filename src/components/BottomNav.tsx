@@ -10,20 +10,23 @@ const navItems = [
   { href: '/profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
 ];
 
-export default function BottomNav() {
+export default function BottomNav({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
+  const items = isAdmin ? [...navItems, { href: '/admin', label: 'Admin', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' }] : navItems;
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-200 z-50">
-      <div className="flex justify-around items-center h-16">
-        {navItems.map(item => {
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-dark-800/95 backdrop-blur-xl border-t border-dark-600 z-50 pb-safe">
+      <div className="flex justify-around items-center h-16 px-2">
+        {items.map(item => {
           const isActive = pathname === item.href;
           return (
-            <Link key={item.href} href={item.href} className={`flex flex-col items-center justify-center w-full h-full ${isActive ? 'text-amber-600' : 'text-gray-400'}`}>
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-              </svg>
-              <span className="text-[10px] mt-1 font-medium">{item.label}</span>
+            <Link key={item.href} href={item.href} className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${isActive ? 'text-gold-500' : 'text-gray-500'}`}>
+              <div className={`p-1.5 rounded-xl transition-all ${isActive ? 'bg-gold-500/10' : ''}`}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+                </svg>
+              </div>
+              <span className="text-[10px] mt-0.5 font-medium">{item.label}</span>
             </Link>
           );
         })}
