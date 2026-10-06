@@ -13,9 +13,12 @@ export default function Header({ user, isAdmin }: { user: User | null, isAdmin: 
           <span className="font-display font-semibold text-lg tracking-wide text-gold-300 hidden xs:block">Shoper</span>
         </Link>
 
-        {/* Admin Badge */}
+        {/* Admin Badge - Shows only for admins */}
         {isAdmin && (
-          <Link href="/admin" className="px-2.5 py-1 bg-gold-500/10 border border-gold-500/30 rounded-lg text-[10px] font-semibold text-gold-500 uppercase tracking-wider">
+          <Link 
+            href="/admin" 
+            className="px-3 py-1.5 bg-gradient-to-r from-gold-500 to-gold-600 text-dark-900 rounded-lg text-xs font-bold uppercase tracking-wider shadow-lg hover:shadow-gold transition-all"
+          >
             Admin
           </Link>
         )}
