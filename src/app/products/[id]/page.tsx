@@ -44,7 +44,7 @@ export default function ProductDetail() {
   };
 
   return (
-    <div className="animate-fade-up">
+    <div className="animate-fade-up pb-32"> {/* Added pb-32 to clear bottom nav */}
       <div className="relative h-96 w-full bg-dark-800">
         {product.images?.[selectedImg] ? <Image src={product.images[selectedImg]} alt={product.title} fill className="object-contain" /> : 
           <div className="flex items-center justify-center h-full text-gold-500/30"><svg className="w-20 h-20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></div>
@@ -61,7 +61,7 @@ export default function ProductDetail() {
         </div>
       )}
 
-      <div className="p-4 pb-32">
+      <div className="p-4">
         <p className="text-xs text-gold-500 font-semibold uppercase tracking-wider">{product.category}</p>
         <h1 className="text-2xl font-bold text-white mt-2">{product.title}</h1>
         <p className="text-3xl font-bold gold-text mt-3">${product.price}</p>
@@ -88,8 +88,9 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-4 bg-dark-900/95 backdrop-blur-xl border-t border-dark-600 z-40">
-        <div className="flex gap-3">
+      {/* Fixed Bottom Action Buttons */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-dark-900/95 backdrop-blur-xl border-t border-dark-600 z-40">
+        <div className="max-w-md mx-auto flex gap-3">
           <button onClick={chatSeller} className="flex-1 btn-outline-gold py-3">Chat</button>
           <button onClick={addToCart} className="flex-[2] btn-gold">Add to Cart · ${(product.price * qty).toFixed(2)}</button>
         </div>
