@@ -51,13 +51,15 @@ export default function Cart() {
   if (loading) return <div className="p-6"><div className="h-32 shimmer rounded-2xl mb-3" /><div className="h-32 shimmer rounded-2xl" /></div>;
 
   return (
-    <div className="p-4 animate-fade-up">
+    <div className="p-4 pb-40 animate-fade-up"> {/* Increased pb-40 to ensure button is never hidden */}
       <h1 className="text-2xl font-bold gold-text mb-1">Your Cart</h1>
       <p className="text-sm text-gray-400 mb-5">{items.length} {items.length === 1 ? 'item' : 'items'}</p>
 
       {items.length === 0 ? (
         <div className="text-center py-20 glass-card">
-          <svg className="w-20 h-20 mx-auto text-gold-500/30 mb-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+          <svg className="w-20 h-20 mx-auto text-gold-500/30 mb-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
           <p className="text-gray-400 mb-4">Your cart is empty</p>
           <Link href="/categories" className="btn-gold inline-block">Start Shopping</Link>
         </div>
@@ -79,7 +81,7 @@ export default function Cart() {
                       <span className="text-sm font-semibold text-white w-5 text-center">{item.quantity}</span>
                       <button onClick={() => updateQty(item.id, 1)} className="w-6 h-6 rounded text-gold-500 font-bold">+</button>
                     </div>
-                    <button onClick={() => removeItem(item.id)} className="text-xs text-red-400 font-semibold">Remove</button>
+                    <button onClick={() => removeItem(item.id)} className="text-xs text-red-400 font-semibold hover:text-red-300">Remove</button>
                   </div>
                 </div>
               </div>
@@ -93,7 +95,15 @@ export default function Cart() {
             <div className="flex justify-between"><span className="font-bold text-white">Total</span><span className="text-xl font-bold gold-text">${subtotal.toFixed(2)}</span></div>
           </div>
 
-          <button onClick={() => router.push('/checkout')} className="btn-gold w-full">Proceed to Checkout</button>
+          {/* Trust Badge */}
+          <div className="flex items-center justify-center gap-2 mb-4 text-xs text-gray-500">
+            <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+            <span>Secure 256-bit SSL Encrypted Checkout</span>
+          </div>
+
+          <button onClick={() => router.push('/checkout')} className="btn-gold w-full shadow-2xl shadow-gold-500/20">
+            Proceed to Checkout
+          </button>
         </>
       )}
     </div>
