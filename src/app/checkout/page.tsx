@@ -4,22 +4,22 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 const COUNTRIES = [
-  { code: 'US', name: 'United States', flag: '🇺' },
+  { code: 'US', name: 'United States', flag: '🇺🇸' },
   { code: 'UK', name: 'United Kingdom', flag: '🇬🇧' },
   { code: 'JP', name: 'Japan', flag: '🇯🇵' },
   { code: 'DE', name: 'Germany', flag: '🇩🇪' },
   { code: 'AU', name: 'Australia', flag: '🇦🇺' },
-  { code: 'AE', name: 'UAE', flag: '🇪' },
-  { code: 'CA', name: 'Canada', flag: '🇦' },
-  { code: 'FR', name: 'France', flag: '🇷' },
-  { code: 'IT', name: 'Italy', flag: '🇹' },
-  { code: 'ES', name: 'Spain', flag: '🇸' },
-  { code: 'BR', name: 'Brazil', flag: '🇷' },
-  { code: 'IN', name: 'India', flag: '🇳' },
-  { code: 'CN', name: 'China', flag: '🇳' },
-  { code: 'KR', name: 'South Korea', flag: '🇷' },
-  { code: 'MX', name: 'Mexico', flag: '🇽' },
-  { code: 'RU', name: 'Russia', flag: '🇺' },
+  { code: 'AE', name: 'UAE', flag: '🇦🇪' },
+  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+  { code: 'FR', name: 'France', flag: '🇫🇷' },
+  { code: 'IT', name: 'Italy', flag: '🇮🇹' },
+  { code: 'ES', name: 'Spain', flag: '🇪🇸' },
+  { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
+  { code: 'IN', name: 'India', flag: '🇮🇳' },
+  { code: 'CN', name: 'China', flag: '🇨🇳' },
+  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
+  { code: 'MX', name: 'Mexico', flag: '🇲🇽' },
+  { code: 'RU', name: 'Russia', flag: '🇷🇺' },
 ];
 
 export default function Checkout() {
@@ -37,7 +37,7 @@ export default function Checkout() {
   
   const router = useRouter();
   const supabase = createClient();
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const cartIds = JSON.parse(localStorage.getItem('shoper_cart') || '[]');
@@ -66,7 +66,6 @@ export default function Checkout() {
 
     setSearchingAddress(true);
     
-    // Debounce the search
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
@@ -75,9 +74,7 @@ export default function Checkout() {
       try {
         const response = await fetch(
           `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&limit=5`,
-          {
-            headers: { 'User-Agent': 'ShoperMarketplace/1.0' }
-          }
+          { headers: { 'User-Agent': 'ShoperMarketplace/1.0' } }
         );
         
         if (!response.ok) throw new Error('Failed to fetch suggestions');
@@ -91,7 +88,7 @@ export default function Checkout() {
       } finally {
         setSearchingAddress(false);
       }
-    }, 300); // 300ms debounce
+    }, 300);
   };
 
   const handleAddressSelect = (suggestion: any) => {
@@ -132,6 +129,16 @@ export default function Checkout() {
         return; 
       }
 
+      // --- FIX FOR FOREIGN KEY ERROR ---
+      // Ensure the user profile exists in the database before creating the order
+      await supabase.from('profiles').upsert({ 
+        id: user.id, 
+        username: user.email?.split('@')[0] || 'user',
+        full_name: address.name,
+        role: 'customer'
+      }, { onConflict: 'id' });
+      // ---------------------------------
+
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -160,10 +167,7 @@ export default function Checkout() {
       }));
 
       const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-      
-      if (itemsError) {
-        console.error('Order items error:', itemsError);
-      }
+      if (itemsError) console.error('Order items error:', itemsError);
 
       // Auto-open chat with first seller
       if (items.length > 0) {
@@ -198,6 +202,7 @@ export default function Checkout() {
         }
       }
 
+      // Fallback if chat fails
       localStorage.removeItem('shoper_cart');
       setSuccess(true);
       setTimeout(() => router.push('/profile'), 2000);
@@ -240,7 +245,7 @@ export default function Checkout() {
       {step === 1 && (
         <div className="animate-slide-up">
           <h2 className="font-semibold text-white mb-4">Select Delivery Country</h2>
-          <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto no-scrollbar">
             {COUNTRIES.map(c => (
               <button
                 key={c.code}
@@ -284,7 +289,6 @@ export default function Checkout() {
               </div>
             )}
             
-            {/* Address Suggestions Dropdown */}
             {showSuggestions && suggestions.length > 0 && (
               <div className="absolute z-50 w-full mt-1 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
                 {suggestions.map((suggestion, idx) => (
@@ -381,17 +385,15 @@ export default function Checkout() {
             </div>
           </div>
 
-          {/* Delivery Address Summary */}
           <div className="glass-card p-4">
             <h3 className="text-xs font-semibold text-gold-500 uppercase mb-2">Delivery Address</h3>
             <p className="text-sm text-white">{address.name}</p>
             <p className="text-xs text-gray-400">{address.street}</p>
             <p className="text-xs text-gray-400">{address.city}, {address.zip}</p>
             <p className="text-xs text-gray-400">{countryName}</p>
-            <p className="text-xs text-gray-400 mt-1">📞 {address.phone}</p>
+            <p className="text-xs text-gray-400 mt-1"> {address.phone}</p>
           </div>
 
-          {/* Trust Badges */}
           <div className="flex items-center justify-center gap-4 py-2">
             <div className="flex items-center gap-1 text-xs text-gray-500">
               <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
