@@ -3,10 +3,6 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
-// Hardcoded admin credentials
-const ADMIN_EMAIL = 'cmcvayhomes@gmail.com';
-const ADMIN_PASSWORD = 'Grinder$$1290';
-
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,64 +16,66 @@ export default function AdminLogin() {
     setError('');
     setLoading(true);
 
-    // 1. Verify hardcoded credentials
-    if (email.trim() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-      setError('Invalid admin credentials.');
+    // Check credentials match
+    if (email !== 'cmcvayhomes@gmail.com' || password !== 'Grinder$$1290') {
+      setError('Invalid credentials');
       setLoading(false);
       return;
     }
 
     try {
-      // 2. Attempt to sign in
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      // Try to login
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      let currentUser = signInData?.user || null;
-
-      // 3. If user doesn't exist, create them
-      if (signInError && (signInError.message.includes('Invalid login credentials') || signInError.message.includes('User not found'))) {
+      if (error) {
+        // If login fails, the account might not exist yet
+        // Create it and set as admin
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: { 
-            data: { full_name: 'Admin User', username: 'admin' }
-          }
+          options: { data: { full_name: 'Admin', username: 'admin' } }
         });
 
         if (signUpError) {
-          setError('Failed to create admin account: ' + signUpError.message);
+          setError(signUpError.message);
           setLoading(false);
           return;
         }
-        currentUser = signUpData?.user || null;
-      } else if (signInError) {
-        setError(signInError.message);
-        setLoading(false);
-        return;
-      }
 
-      // 4. FORCE set the role to 'admin' in the profiles table to guarantee access
-      if (currentUser) {
-        await supabase.from('profiles').upsert(
-          { 
-            id: currentUser.id, 
-            role: 'admin', 
-            full_name: 'Admin User', 
-            username: 'admin' 
-          },
-          { onConflict: 'id' }
-        );
+        if (signUpData.user) {
+          // Set admin role
+          await supabase.from('profiles').upsert({
+            id: signUpData.user.id,
+            role: 'admin',
+            full_name: 'Admin',
+            username: 'admin'
+          }, { onConflict: 'id' });
+          
+          router.push('/admin');
+        }
+      } else if (data.user) {
+        // Login successful - verify admin role
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
 
-        // 5. Redirect to admin panel
+        // Ensure admin role is set
+        if (!profile || profile.role !== 'admin') {
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            role: 'admin'
+          }, { onConflict: 'id' });
+        }
+
         router.push('/admin');
-        router.refresh();
-      } else {
-        setError('Failed to authenticate user.');
       }
     } catch (err: any) {
-      setError('An unexpected error occurred: ' + err.message);
+      setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -85,9 +83,9 @@ export default function AdminLogin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-dark-900">
-      <div className="w-full max-w-md glass-card p-8 animate-fade-up">
+      <div className="w-full max-w-md glass-card p-8">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full gold-gradient flex items-center justify-center shadow-gold-lg">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full gold-gradient flex items-center justify-center">
             <svg className="w-8 h-8 text-dark-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
@@ -110,7 +108,7 @@ export default function AdminLogin() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="input-dark"
-              placeholder="admin@shoper.com"
+              defaultValue="cmcvayhomes@gmail.com"
               required
             />
           </div>
@@ -122,7 +120,6 @@ export default function AdminLogin() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="input-dark"
-              placeholder="••••••••"
               required
             />
           </div>
@@ -130,19 +127,14 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={loading}
-            className="btn-gold w-full disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-gold w-full disabled:opacity-50"
           >
-            {loading ? 'Authenticating...' : 'Access Admin Panel'}
+            {loading ? 'Please wait...' : 'Access Admin Panel'}
           </button>
         </form>
 
-        <div className="mt-6 p-4 bg-dark-800/50 rounded-xl border border-dark-700">
-          <p className="text-xs text-gray-500 text-center mb-2">Default Admin Credentials</p>
-          <p className="text-xs text-gold-500 font-mono text-center break-all">{ADMIN_EMAIL}</p>
-        </div>
-
         <div className="mt-6 text-center">
-          <a href="/" className="text-sm text-gold-500 hover:text-gold-400 transition-colors">
+          <a href="/" className="text-sm text-gold-500 hover:text-gold-400">
             ← Back to Store
           </a>
         </div>
