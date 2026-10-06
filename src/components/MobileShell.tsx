@@ -7,10 +7,16 @@ export default async function MobileShell({ children }: { children: React.ReactN
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
-  const profile = user 
-    ? (await supabase.from('profiles').select('role').eq('id', user.id).single()).data 
-    : null;
-  const isAdmin = profile?.role === 'admin';
+  // Fetch user role from profiles table
+  let isAdmin = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    isAdmin = profile?.role === 'admin';
+  }
 
   return (
     <div className="min-h-screen bg-dark-900 flex justify-center">
