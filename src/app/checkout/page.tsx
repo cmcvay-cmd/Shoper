@@ -1,17 +1,25 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 const COUNTRIES = [
-  { code: 'US', name: 'United States', flag: '🇸' },
-  { code: 'UK', name: 'United Kingdom', flag: '🇧' },
-  { code: 'JP', name: 'Japan', flag: '🇵' },
-  { code: 'DE', name: 'Germany', flag: '🇪' },
-  { code: 'AU', name: 'Australia', flag: '🇺' },
-  { code: 'AE', name: 'UAE', flag: '🇦🇪' },
-  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
-  { code: 'FR', name: 'France', flag: '🇫🇷' },
+  { code: 'US', name: 'United States', flag: '🇺' },
+  { code: 'UK', name: 'United Kingdom', flag: '🇬🇧' },
+  { code: 'JP', name: 'Japan', flag: '🇯🇵' },
+  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
+  { code: 'AE', name: 'UAE', flag: '🇪' },
+  { code: 'CA', name: 'Canada', flag: '🇦' },
+  { code: 'FR', name: 'France', flag: '🇷' },
+  { code: 'IT', name: 'Italy', flag: '🇹' },
+  { code: 'ES', name: 'Spain', flag: '🇸' },
+  { code: 'BR', name: 'Brazil', flag: '🇷' },
+  { code: 'IN', name: 'India', flag: '🇳' },
+  { code: 'CN', name: 'China', flag: '🇳' },
+  { code: 'KR', name: 'South Korea', flag: '🇷' },
+  { code: 'MX', name: 'Mexico', flag: '🇽' },
+  { code: 'RU', name: 'Russia', flag: '🇺' },
 ];
 
 export default function Checkout() {
@@ -23,8 +31,13 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchingAddress, setSearchingAddress] = useState(false);
+  
   const router = useRouter();
   const supabase = createClient();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const cartIds = JSON.parse(localStorage.getItem('shoper_cart') || '[]');
@@ -32,10 +45,7 @@ export default function Checkout() {
     
     const ids = cartIds.map((i: any) => i.id);
     supabase.from('products').select('id, title, price, seller_id, stock').in('id', ids).then(({ data, error }) => {
-      if (error) {
-        setError('Failed to load cart items');
-        return;
-      }
+      if (error) { setError('Failed to load cart items'); return; }
       if (data) {
         const mapped = data.map(p => {
           const ci = cartIds.find((i: any) => i.id === p.id);
@@ -45,6 +55,61 @@ export default function Checkout() {
       }
     });
   }, []);
+
+  // Real-time address suggestions using Nominatim (OpenStreetMap - Free)
+  const fetchAddressSuggestions = async (query: string) => {
+    if (query.length < 3) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    setSearchingAddress(true);
+    
+    // Debounce the search
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&limit=5`,
+          {
+            headers: { 'User-Agent': 'ShoperMarketplace/1.0' }
+          }
+        );
+        
+        if (!response.ok) throw new Error('Failed to fetch suggestions');
+        
+        const data = await response.json();
+        setSuggestions(data);
+        setShowSuggestions(data.length > 0);
+      } catch (err) {
+        console.error('Address search error:', err);
+        setSuggestions([]);
+      } finally {
+        setSearchingAddress(false);
+      }
+    }, 300); // 300ms debounce
+  };
+
+  const handleAddressSelect = (suggestion: any) => {
+    const addr = suggestion.address || {};
+    setAddress({
+      ...address,
+      street: suggestion.display_name || '',
+      city: addr.city || addr.town || addr.village || addr.suburb || '',
+      zip: addr.postcode || '',
+    });
+    setShowSuggestions(false);
+    setSuggestions([]);
+  };
+
+  const handleStreetChange = (value: string) => {
+    setAddress({ ...address, street: value });
+    fetchAddressSuggestions(value);
+  };
 
   const subtotal = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
   const shipping = country ? (country === 'JP' || country === 'AE' ? 15 : 10) : 0;
@@ -67,7 +132,6 @@ export default function Checkout() {
         return; 
       }
 
-      // Create order
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -87,7 +151,6 @@ export default function Checkout() {
         return;
       }
 
-      // Create order items
       const orderItems = items.map(i => ({
         order_id: order.id,
         product_id: i.id,
@@ -100,15 +163,12 @@ export default function Checkout() {
       
       if (itemsError) {
         console.error('Order items error:', itemsError);
-        // Don't fail completely - order is created
-        console.warn('Order items failed but order was created');
       }
 
       // Auto-open chat with first seller
       if (items.length > 0) {
         const firstItem = items[0];
         
-        // Create or get chat room
         const { data: room, error: roomError } = await supabase
           .from('chat_rooms')
           .upsert({
@@ -120,7 +180,6 @@ export default function Checkout() {
           .single();
 
         if (room && !roomError) {
-          // Send order confirmation message
           await supabase.from('messages').insert({
             room_id: room.id,
             sender_id: user.id,
@@ -129,24 +188,16 @@ export default function Checkout() {
             metadata: {
               orderId: order.id,
               total: total,
-              items: items.map(i => ({
-                title: i.title,
-                qty: i.quantity,
-                price: i.price
-              }))
+              items: items.map(i => ({ title: i.title, qty: i.quantity, price: i.price }))
             }
           });
 
-          // Clear cart
           localStorage.removeItem('shoper_cart');
-          
-          // Navigate to chat
           router.push(`/chat?room=${room.id}`);
           return;
         }
       }
 
-      // Fallback: clear cart and go to profile
       localStorage.removeItem('shoper_cart');
       setSuccess(true);
       setTimeout(() => router.push('/profile'), 2000);
@@ -189,7 +240,7 @@ export default function Checkout() {
       {step === 1 && (
         <div className="animate-slide-up">
           <h2 className="font-semibold text-white mb-4">Select Delivery Country</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto">
             {COUNTRIES.map(c => (
               <button
                 key={c.code}
@@ -207,44 +258,91 @@ export default function Checkout() {
       {step === 2 && (
         <div className="space-y-3 animate-slide-up">
           <h2 className="font-semibold text-white mb-4">Delivery Address</h2>
-          <input
-            placeholder="Full Name"
-            value={address.name}
-            onChange={e => setAddress({...address, name: e.target.value})}
-            className={`input-dark transition-all ${!address.name && error ? 'border-red-500' : ''}`}
-          />
-          <input
-            placeholder="Street Address"
-            value={address.street}
-            onChange={e => setAddress({...address, street: e.target.value})}
-            className={`input-dark transition-all ${!address.street && error ? 'border-red-500' : ''}`}
-          />
-          <div className="grid grid-cols-2 gap-3">
+          
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Full Name</label>
             <input
-              placeholder="City"
-              value={address.city}
-              onChange={e => setAddress({...address, city: e.target.value})}
-              className={`input-dark transition-all ${!address.city && error ? 'border-red-500' : ''}`}
-            />
-            <input
-              placeholder="ZIP Code"
-              value={address.zip}
-              onChange={e => setAddress({...address, zip: e.target.value})}
-              className={`input-dark transition-all ${!address.zip && error ? 'border-red-500' : ''}`}
+              placeholder="John Doe"
+              value={address.name}
+              onChange={e => setAddress({...address, name: e.target.value})}
+              className={`input-dark transition-all ${!address.name && error ? 'border-red-500' : ''}`}
             />
           </div>
-          <input
-            placeholder="Phone Number"
-            value={address.phone}
-            onChange={e => setAddress({...address, phone: e.target.value})}
-            className={`input-dark transition-all ${!address.phone && error ? 'border-red-500' : ''}`}
-          />
+
+          <div className="relative">
+            <label className="block text-xs text-gray-400 mb-1">Street Address</label>
+            <input
+              placeholder="Start typing your address..."
+              value={address.street}
+              onChange={e => handleStreetChange(e.target.value)}
+              className={`input-dark transition-all ${!address.street && error ? 'border-red-500' : ''}`}
+              autoComplete="street-address"
+            />
+            {searchingAddress && (
+              <div className="absolute right-3 top-9">
+                <div className="w-4 h-4 border-2 border-gold-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            
+            {/* Address Suggestions Dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                {suggestions.map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleAddressSelect(suggestion)}
+                    className="w-full text-left p-3 hover:bg-dark-700 transition-colors border-b border-dark-700 last:border-0"
+                  >
+                    <p className="text-sm text-white truncate">{suggestion.display_name}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {suggestion.address?.city || suggestion.address?.town || suggestion.address?.village || ''}
+                      {suggestion.address?.country && `, ${suggestion.address.country}`}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">City</label>
+              <input
+                placeholder="City"
+                value={address.city}
+                onChange={e => setAddress({...address, city: e.target.value})}
+                className={`input-dark transition-all ${!address.city && error ? 'border-red-500' : ''}`}
+                autoComplete="address-level2"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">ZIP Code</label>
+              <input
+                placeholder="ZIP Code"
+                value={address.zip}
+                onChange={e => setAddress({...address, zip: e.target.value})}
+                className={`input-dark transition-all ${!address.zip && error ? 'border-red-500' : ''}`}
+                autoComplete="postal-code"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Phone Number</label>
+            <input
+              placeholder="+1 234 567 8900"
+              value={address.phone}
+              onChange={e => setAddress({...address, phone: e.target.value})}
+              className={`input-dark transition-all ${!address.phone && error ? 'border-red-500' : ''}`}
+              autoComplete="tel"
+            />
+          </div>
           
           <div className="flex gap-3 mt-6">
             <button onClick={() => { setStep(1); setError(''); }} className="btn-outline-gold flex-1 transition-all active:scale-95">
               Back
             </button>
-            <button onClick={() => { setStep(3); setError(''); }} className="btn-gold flex-[2] transition-all active:scale-95">
+            <button onClick={() => { setStep(3); setError(''); setShowSuggestions(false); }} className="btn-gold flex-[2] transition-all active:scale-95">
               Continue
             </button>
           </div>
@@ -281,6 +379,16 @@ export default function Checkout() {
               <span className="font-bold text-white">Total</span>
               <span className="text-xl font-bold gold-text">${total.toFixed(2)}</span>
             </div>
+          </div>
+
+          {/* Delivery Address Summary */}
+          <div className="glass-card p-4">
+            <h3 className="text-xs font-semibold text-gold-500 uppercase mb-2">Delivery Address</h3>
+            <p className="text-sm text-white">{address.name}</p>
+            <p className="text-xs text-gray-400">{address.street}</p>
+            <p className="text-xs text-gray-400">{address.city}, {address.zip}</p>
+            <p className="text-xs text-gray-400">{countryName}</p>
+            <p className="text-xs text-gray-400 mt-1">📞 {address.phone}</p>
           </div>
 
           {/* Trust Badges */}
