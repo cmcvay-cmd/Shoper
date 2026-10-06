@@ -1,13 +1,15 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    './src/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
       colors: {
         gold: {
-          50:  '#fbf8f1',
+          50: '#fbf8f1',
           100: '#f5edd8',
           200: '#ead9b0',
           300: '#dbc07e',
@@ -24,6 +26,7 @@ module.exports = {
           800: '#161616',
           750: '#1c1c1c',
           700: '#242424',
+          600: '#2a2a2a',
         }
       },
       fontFamily: {
@@ -35,25 +38,6 @@ module.exports = {
         'gold': '0 0 20px -5px rgba(192, 139, 63, 0.35)',
         'gold-lg': '0 0 40px -10px rgba(192, 139, 63, 0.4)',
       }
-    },
-  },
-  plugins: [],
-}
-
-module.exports = {
-  content: [
-    './src/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
-  theme: {
-    extend: {
-      screens: {
-        'xs': '480px',
-        'sm': '640px',
-        'md': '768px',
-        'lg': '1024px',
-        'xl': '1280px',
-      },
-      // ... rest of your config
     },
   },
   plugins: [],
