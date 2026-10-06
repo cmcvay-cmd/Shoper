@@ -5,13 +5,15 @@ import MobileShell from "@/components/MobileShell";
 
 const inter = Inter({ 
   subsets: ["latin"], 
-  variable: '--font-sans' 
+  variable: '--font-sans',
+  display: 'swap',
 });
 
 const playfair = Playfair_Display({ 
   subsets: ["latin"], 
   variable: '--font-display',
-  weight: ['500', '600', '700']
+  weight: ['500', '600', '700'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = { 
@@ -23,7 +25,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
-      <body className={`${inter.className} bg-dark-900 text-white font-sans antialiased`}>
+      <body className="min-h-screen bg-dark-900 text-white font-sans antialiased">
         <MobileShell>{children}</MobileShell>
       </body>
     </html>
