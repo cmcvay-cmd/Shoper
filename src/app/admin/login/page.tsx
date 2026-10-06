@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('cmcvayhomes@gmail.com');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,63 +16,33 @@ export default function AdminLogin() {
     setError('');
     setLoading(true);
 
-    // Check credentials match
-    if (email !== 'cmcvayhomes@gmail.com' || password !== 'Grinder$$1290') {
-      setError('Invalid credentials');
-      setLoading(false);
-      return;
-    }
-
     try {
-      // Try to login
+      // Login with Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim(),
+        password: password,
       });
 
-      if (error) {
-        // If login fails, the account might not exist yet
-        // Create it and set as admin
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { full_name: 'Admin', username: 'admin' } }
-        });
+      if (error) throw error;
 
-        if (signUpError) {
-          setError(signUpError.message);
-          setLoading(false);
-          return;
-        }
-
-        if (signUpData.user) {
-          // Set admin role
-          await supabase.from('profiles').upsert({
-            id: signUpData.user.id,
+      if (data.user) {
+        // FORCE set admin role - this is the key fix
+        const { error: upsertError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: data.user.id,
             role: 'admin',
-            full_name: 'Admin',
+            full_name: 'Admin User',
             username: 'admin'
           }, { onConflict: 'id' });
-          
-          router.push('/admin');
-        }
-      } else if (data.user) {
-        // Login successful - verify admin role
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
 
-        // Ensure admin role is set
-        if (!profile || profile.role !== 'admin') {
-          await supabase.from('profiles').upsert({
-            id: data.user.id,
-            role: 'admin'
-          }, { onConflict: 'id' });
+        if (upsertError) {
+          console.error('Failed to set admin role:', upsertError);
         }
 
+        // Redirect to admin
         router.push('/admin');
+        router.refresh();
       }
     } catch (err: any) {
       setError(err.message || 'Login failed');
@@ -108,7 +78,6 @@ export default function AdminLogin() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="input-dark"
-              defaultValue="cmcvayhomes@gmail.com"
               required
             />
           </div>
