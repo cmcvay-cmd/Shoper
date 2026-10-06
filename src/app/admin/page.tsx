@@ -14,6 +14,7 @@ export default function Admin() {
   const [orders, setOrders] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
@@ -30,30 +31,76 @@ export default function Admin() {
 
   useEffect(() => {
     const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/admin/login'); return; }
-      const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      if (data?.role !== 'admin') { router.push('/admin/login'); return; }
-      setIsAdmin(true);
-      setLoading(false);
-      await loadData();
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError || !user) { 
+          console.error('Auth error:', userError);
+          router.push('/admin/login'); 
+          return; 
+        }
+        
+        const { data, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        
+        if (profileError) {
+          console.error('Profile error:', profileError);
+          setError('Failed to load profile');
+          setLoading(false);
+          return;
+        }
+        
+        if (data?.role !== 'admin') { 
+          router.push('/admin/login'); 
+          return; 
+        }
+        
+        setIsAdmin(true);
+        await loadData();
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        setError('An error occurred. Please refresh the page.');
+        setLoading(false);
+      }
     };
     checkAdmin();
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
-    const [prodRes, ordRes, usrRes] = await Promise.all([
-      supabase.from('products').select('*').order('created_at', { ascending: false }),
-      supabase.from('orders').select('*').order('created_at', { ascending: false }),
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-    ]);
-    if (prodRes.data) setProducts(prodRes.data);
-    if (ordRes.data) setOrders(ordRes.data);
-    if (usrRes.data) setUsers(usrRes.data);
-    const revenue = ordRes.data?.reduce((sum: number, o: any) => sum + Number(o.total_amount), 0) || 0;
-    setStats({ revenue, orders: ordRes.data?.length || 0, products: prodRes.data?.length || 0, users: usrRes.data?.length || 0 });
-    setLoading(false);
+    try {
+      setLoading(true);
+      setError('');
+      
+      const [prodRes, ordRes, usrRes] = await Promise.all([
+        supabase.from('products').select('*').order('created_at', { ascending: false }),
+        supabase.from('orders').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+      ]);
+      
+      if (prodRes.error) throw new Error('Failed to load products');
+      if (ordRes.error) throw new Error('Failed to load orders');
+      if (usrRes.error) throw new Error('Failed to load users');
+      
+      if (prodRes.data) setProducts(prodRes.data);
+      if (ordRes.data) setOrders(ordRes.data);
+      if (usrRes.data) setUsers(usrRes.data);
+      
+      const revenue = ordRes.data?.reduce((sum: number, o: any) => sum + Number(o.total_amount), 0) || 0;
+      setStats({ 
+        revenue, 
+        orders: ordRes.data?.length || 0, 
+        products: prodRes.data?.length || 0, 
+        users: usrRes.data?.length || 0 
+      });
+    } catch (err) {
+      console.error('Load data error:', err);
+      setError('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,7 +111,11 @@ export default function Admin() {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
       const { error } = await supabase.storage.from('products').upload(fileName, file);
-      if (error) { alert('Upload error: ' + error.message); setUploading(false); return; }
+      if (error) { 
+        alert('Upload error: ' + error.message); 
+        setUploading(false); 
+        return; 
+      }
       const { data } = supabase.storage.from('products').getPublicUrl(fileName);
       if (data.publicUrl) uploadedUrls.push(data.publicUrl);
     }
@@ -78,23 +129,84 @@ export default function Admin() {
     e.preventDefault();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const payload = { seller_id: user.id, title, price: parseFloat(price), category, stock: parseInt(stock), description, images: imageUrls, colors: colors ? colors.split(',').map(c => c.trim()) : [] };
-    const { error } = editingId ? await supabase.from('products').update(payload).eq('id', editingId) : await supabase.from('products').insert(payload);
-    if (error) { alert('Error: ' + error.message); return; }
+    const payload = { 
+      seller_id: user.id, 
+      title, 
+      price: parseFloat(price), 
+      category, 
+      stock: parseInt(stock), 
+      description, 
+      images: imageUrls, 
+      colors: colors ? colors.split(',').map(c => c.trim()) : [] 
+    };
+    const { error } = editingId 
+      ? await supabase.from('products').update(payload).eq('id', editingId) 
+      : await supabase.from('products').insert(payload);
+    
+    if (error) { 
+      alert('Error: ' + error.message); 
+      return; 
+    }
     alert(editingId ? 'Product updated!' : 'Product added!');
     resetForm();
     await loadData();
     setTab('products');
   };
 
-  const resetForm = () => { setTitle(''); setPrice(''); setCategory(''); setStock(''); setDescription(''); setColors(''); setImageUrls([]); setEditingId(null); };
-  const editProduct = (p: any) => { setTitle(p.title); setPrice(String(p.price)); setCategory(p.category); setStock(String(p.stock)); setDescription(p.description || ''); setColors((p.colors || []).join(', ')); setImageUrls(p.images || []); setEditingId(p.id); setTab('add'); };
-  const deleteProduct = async (id: string) => { if (!confirm('Delete this product?')) return; await supabase.from('products').delete().eq('id', id); await loadData(); };
-  const updateOrderStatus = async (id: string, status: string) => { await supabase.from('orders').update({ status }).eq('id', id); await loadData(); };
-  const toggleUserRole = async (userId: string, currentRole: string) => { await supabase.from('profiles').update({ role: currentRole === 'admin' ? 'customer' : 'admin' }).eq('id', userId); await loadData(); };
+  const resetForm = () => { 
+    setTitle(''); 
+    setPrice(''); 
+    setCategory(''); 
+    setStock(''); 
+    setDescription(''); 
+    setColors(''); 
+    setImageUrls([]); 
+    setEditingId(null); 
+  };
+  
+  const editProduct = (p: any) => { 
+    setTitle(p.title); 
+    setPrice(String(p.price)); 
+    setCategory(p.category); 
+    setStock(String(p.stock)); 
+    setDescription(p.description || ''); 
+    setColors((p.colors || []).join(', ')); 
+    setImageUrls(p.images || []); 
+    setEditingId(p.id); 
+    setTab('add'); 
+  };
+  
+  const deleteProduct = async (id: string) => { 
+    if (!confirm('Delete this product?')) return; 
+    await supabase.from('products').delete().eq('id', id); 
+    await loadData(); 
+  };
+  
+  const updateOrderStatus = async (id: string, status: string) => { 
+    await supabase.from('orders').update({ status }).eq('id', id); 
+    await loadData(); 
+  };
+  
+  const toggleUserRole = async (userId: string, currentRole: string) => { 
+    await supabase.from('profiles').update({ role: currentRole === 'admin' ? 'customer' : 'admin' }).eq('id', userId); 
+    await loadData(); 
+  };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-dark-900"><div className="w-12 h-12 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" /><p className="text-gold-500">Loading Admin Panel...</p></div>;
-  if (!isAdmin) return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-dark-900">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gold-500">Loading Admin Panel...</p>
+          {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return null;
+  }
 
   const statCards = [
     { label: 'Revenue', value: `$${stats.revenue.toFixed(2)}`, icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'from-gold-500 to-gold-700' },
@@ -158,7 +270,7 @@ export default function Admin() {
             {products.length === 0 ? <div className="glass-card p-10 text-center"><p className="text-gray-400">No products yet</p></div> : products.map(p => (
               <div key={p.id} className="glass-card p-3 flex gap-3">
                 <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-dark-700 flex-shrink-0">
-                  {p.images?.[0] ? <Image src={p.images[0]} alt={p.title} fill className="object-cover" /> : <div className="flex items-center justify-center h-full text-gold-500/30">📦</div>}
+                  {p.images?.[0] ? <Image src={p.images[0]} alt={p.title} fill className="object-cover" /> : <div className="flex items-center justify-center h-full text-gold-500/30"></div>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-white text-sm truncate">{p.title}</h3>
