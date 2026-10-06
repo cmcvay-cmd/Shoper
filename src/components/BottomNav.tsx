@@ -15,8 +15,8 @@ export default function BottomNav({ isAdmin }: { isAdmin: boolean }) {
   const items = isAdmin ? [...navItems, { href: '/admin', label: 'Admin', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' }] : navItems;
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-dark-800/95 backdrop-blur-xl border-t border-dark-600 z-50 pb-safe">
-      <div className="flex justify-around items-center h-16 px-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 w-full bg-dark-900/95 backdrop-blur-xl border-t border-gold-900/30 pb-safe">
+      <div className="w-full flex justify-around items-center h-16 px-2 pb-2"> {/* Added pb-2 for iPhone home indicator */}
         {items.map(item => {
           const isActive = pathname === item.href;
           return (
