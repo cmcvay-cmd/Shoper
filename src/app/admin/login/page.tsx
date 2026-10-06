@@ -20,69 +20,104 @@ export default function AdminLogin() {
     setError('');
     setLoading(true);
 
-    // Check credentials
-    if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-      setError('Invalid admin credentials');
+    // Verify credentials match hardcoded admin
+    if (email.trim() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+      setError('Invalid admin credentials. Please check your email and password.');
       setLoading(false);
       return;
     }
 
-    // Try to sign in
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    try {
+      // First, try to sign in
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-    if (error) {
-      // If user doesn't exist, create admin account
-      if (error.message.includes('Invalid login credentials')) {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
+      if (signInError) {
+        // If user doesn't exist, create the admin account
+        if (signInError.message.includes('Invalid login credentials') || 
+            signInError.message.includes('User not found')) {
+          
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email,
+              password,
+              options: {
+                data: {
+                  full_name: 'Admin User',
+                  username: 'admin',
+                  role: 'admin'
+                }
+              }
+            });
+
+            if (signUpError) {
+              setError('Failed to create admin account: ' + signUpError.message);
+              setLoading(false);
+              return;
+            }
+
+            if (signUpData.user) {
+              // Ensure admin role is set in profiles table
+              await supabase
+                .from('profiles')
+                .upsert({ 
+                  id: signUpData.user.id, 
+                  role: 'admin',
+                  full_name: 'Admin User',
+                  username: 'admin'
+                }, {
+                  onConflict: 'id'
+                });
+
+              // Sign in after signup
+              const { error: loginAfterSignupError } = await supabase.auth.signInWithPassword({
+                email,
+                password
+              });
+
+              if (loginAfterSignupError) {
+                setError(loginAfterSignupError.message);
+                setLoading(false);
+                return;
+              }
+
+              router.push('/admin');
+              return;
+            }
+        } else {
+          setError(signInError.message);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // If login successful, verify admin role
+      if (data.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError || profile?.role !== 'admin') {
+          // Set admin role if not set
+          await supabase
+            .from('profiles')
+            .upsert({ 
+              id: data.user.id, 
+              role: 'admin',
               full_name: 'Admin User',
               username: 'admin'
-            }
-          }
-        });
-
-        if (signUpError) {
-          setError(signUpError.message);
-        } else {
-          // Set admin role in profiles table
-          const { data: newUser } = await supabase.auth.getUser();
-          if (newUser.user) {
-            await supabase
-              .from('profiles')
-              .upsert({ 
-                id: newUser.user.id, 
-                role: 'admin',
-                full_name: 'Admin User',
-                username: 'admin'
-              });
-            
-            // Auto login after signup
-            await supabase.auth.signInWithPassword({ email, password });
-            router.push('/admin');
-          }
+            }, {
+              onConflict: 'id'
+            });
         }
-      } else {
-        setError(error.message);
-      }
-    } else if (data.user) {
-      // Verify user is admin
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single();
 
-      if (profile?.role === 'admin') {
         router.push('/admin');
-      } else {
-        setError('Access denied. Not an admin account.');
       }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
     }
     
     setLoading(false);
