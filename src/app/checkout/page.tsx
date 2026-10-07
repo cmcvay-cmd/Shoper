@@ -15,8 +15,8 @@ const COUNTRIES = [
   { code: 'IT', name: 'Italy', flag: '🇮🇹' },
   { code: 'ES', name: 'Spain', flag: '🇪🇸' },
   { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
-  { code: 'KR', name: 'South Korea', flag: '🇷' },
-  { code: 'MX', name: 'Mexico', flag: '🇽' },
+  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
+  { code: 'MX', name: 'Mexico', flag: '🇲🇽' },
 ];
 
 export default function Checkout() {
@@ -28,13 +28,14 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [searchingAddress, setSearchingAddress] = useState(false);
   
+  // Payment State
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'transfer'>('card');
+  const [cardDetails, setCardDetails] = useState({ number: '', expiry: '', cvc: '', name: '' });
+  const [processingPayment, setProcessingPayment] = useState(false);
+
   const router = useRouter();
   const supabase = createClient();
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const cartIds = JSON.parse(localStorage.getItem('shoper_cart') || '[]');
@@ -53,58 +54,6 @@ export default function Checkout() {
     });
   }, []);
 
-  // Real-time address suggestions using Nominatim (OpenStreetMap - Free)
-  const fetchAddressSuggestions = async (query: string) => {
-    if (query.length < 3) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-
-    setSearchingAddress(true);
-    
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    searchTimeoutRef.current = setTimeout(async () => {
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&limit=5`,
-          { headers: { 'User-Agent': 'ShoperMarketplace/1.0' } }
-        );
-        
-        if (!response.ok) throw new Error('Failed to fetch suggestions');
-        
-        const data = await response.json();
-        setSuggestions(data);
-        setShowSuggestions(data.length > 0);
-      } catch (err) {
-        console.error('Address search error:', err);
-        setSuggestions([]);
-      } finally {
-        setSearchingAddress(false);
-      }
-    }, 300);
-  };
-
-  const handleAddressSelect = (suggestion: any) => {
-    const addr = suggestion.address || {};
-    setAddress({
-      ...address,
-      street: suggestion.display_name || '',
-      city: addr.city || addr.town || addr.village || addr.suburb || '',
-      zip: addr.postcode || '',
-    });
-    setShowSuggestions(false);
-    setSuggestions([]);
-  };
-
-  const handleStreetChange = (value: string) => {
-    setAddress({ ...address, street: value });
-    fetchAddressSuggestions(value);
-  };
-
   const subtotal = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
   const shipping = country ? (country === 'JP' || country === 'AE' ? 15 : 10) : 0;
   const total = subtotal + shipping;
@@ -114,27 +63,28 @@ export default function Checkout() {
       setError('Please fill in all delivery details');
       return;
     }
+    if (paymentMethod === 'card' && (!cardDetails.number || !cardDetails.expiry || !cardDetails.cvc || !cardDetails.name)) {
+      setError('Please fill in all card details');
+      return;
+    }
     
     setError('');
     setLoading(true);
+    setProcessingPayment(true);
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { 
-        setError('Please login to place order');
-        setLoading(false);
-        return; 
-      }
+      if (!user) { setError('Please login to place order'); setLoading(false); setProcessingPayment(false); return; }
 
-      // --- FIX FOR FOREIGN KEY ERROR ---
-      // Ensure the user profile exists in the database before creating the order
+      // Ensure profile exists
       await supabase.from('profiles').upsert({ 
-        id: user.id, 
-        username: user.email?.split('@')[0] || 'user',
-        full_name: address.name,
-        role: 'customer'
+        id: user.id, username: user.email?.split('@')[0] || 'user', full_name: address.name, role: 'customer'
       }, { onConflict: 'id' });
-      // ---------------------------------
+
+      // Simulate payment processing delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const orderStatus = paymentMethod === 'transfer' ? 'pending_transfer' : 'paid';
 
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -143,78 +93,38 @@ export default function Checkout() {
           total_amount: total,
           country: countryName,
           shipping_address: address,
-          status: 'pending'
+          payment_method: paymentMethod,
+          status: orderStatus
         })
         .select()
         .single();
 
       if (orderError || !order) {
-        console.error('Order error:', orderError);
         setError('Failed to create order: ' + (orderError?.message || 'Unknown error'));
-        setLoading(false);
+        setLoading(false); setProcessingPayment(false);
         return;
       }
 
       const orderItems = items.map(i => ({
-        order_id: order.id,
-        product_id: i.id,
-        quantity: i.quantity,
-        price: i.price,
-        color: i.color
+        order_id: order.id, product_id: i.id, quantity: i.quantity, price: i.price, color: i.color
       }));
+      await supabase.from('order_items').insert(orderItems);
 
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-      if (itemsError) console.error('Order items error:', itemsError);
-
-      // Auto-open chat with first seller
-      if (items.length > 0) {
-        const firstItem = items[0];
-        
-        const { data: room, error: roomError } = await supabase
-          .from('chat_rooms')
-          .upsert({
-            buyer_id: user.id,
-            seller_id: firstItem.seller_id,
-            product_id: firstItem.id
-          }, { onConflict: 'buyer_id,seller_id,product_id' })
-          .select()
-          .single();
-
-        if (room && !roomError) {
-          await supabase.from('messages').insert({
-            room_id: room.id,
-            sender_id: user.id,
-            type: 'order_card',
-            content: 'New order placed',
-            metadata: {
-              orderId: order.id,
-              total: total,
-              items: items.map(i => ({ title: i.title, qty: i.quantity, price: i.price }))
-            }
-          });
-
-          localStorage.removeItem('shoper_cart');
-          router.push(`/chat?room=${room.id}`);
-          return;
-        }
-      }
-
-      // Fallback if chat fails
       localStorage.removeItem('shoper_cart');
       setSuccess(true);
-      setTimeout(() => router.push('/profile'), 2000);
+      setTimeout(() => router.push('/chat'), 2500); // Redirect to Support Chat
       
     } catch (err: any) {
       console.error('Checkout error:', err);
       setError('Unexpected error: ' + err.message);
     } finally {
       setLoading(false);
+      setProcessingPayment(false);
     }
   };
 
   return (
     <div className="p-4 pb-40 animate-fade-up">
-      {/* Progress Bar */}
       <div className="flex items-center gap-2 mb-6">
         {[1, 2, 3].map(s => (
           <div key={s} className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${s <= step ? 'gold-gradient' : 'bg-dark-700'}`} />
@@ -226,16 +136,14 @@ export default function Checkout() {
 
       {error && (
         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2 animate-shake">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           {error}
         </div>
       )}
 
       {success && (
         <div className="mb-4 p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-sm text-center animate-fade-up">
-          ✓ Order placed successfully!
+          ✓ Order placed successfully! Redirecting to Support...
         </div>
       )}
 
@@ -244,11 +152,8 @@ export default function Checkout() {
           <h2 className="font-semibold text-white mb-4">Select Delivery Country</h2>
           <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto no-scrollbar">
             {COUNTRIES.map(c => (
-              <button
-                key={c.code}
-                onClick={() => { setCountry(c.code); setCountryName(c.name); setStep(2); }}
-                className={`glass-card p-4 text-left transition-all duration-200 hover:scale-105 active:scale-95 ${country === c.code ? 'border-gold-500 bg-gold-500/5' : ''}`}
-              >
+              <button key={c.code} onClick={() => { setCountry(c.code); setCountryName(c.name); setStep(2); }}
+                className={`glass-card p-4 text-left transition-all duration-200 hover:scale-105 active:scale-95 ${country === c.code ? 'border-gold-500 bg-gold-500/5' : ''}`}>
                 <span className="text-2xl">{c.flag}</span>
                 <p className="text-sm font-semibold text-white mt-2">{c.name}</p>
               </button>
@@ -260,174 +165,75 @@ export default function Checkout() {
       {step === 2 && (
         <div className="space-y-3 animate-slide-up">
           <h2 className="font-semibold text-white mb-4">Delivery Address</h2>
-          
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Full Name</label>
-            <input
-              placeholder="John Doe"
-              value={address.name}
-              onChange={e => setAddress({...address, name: e.target.value})}
-              className={`input-dark transition-all ${!address.name && error ? 'border-red-500' : ''}`}
-            />
-          </div>
-
-          <div className="relative">
-            <label className="block text-xs text-gray-400 mb-1">Street Address</label>
-            <input
-              placeholder="Start typing your address..."
-              value={address.street}
-              onChange={e => handleStreetChange(e.target.value)}
-              className={`input-dark transition-all ${!address.street && error ? 'border-red-500' : ''}`}
-              autoComplete="street-address"
-            />
-            {searchingAddress && (
-              <div className="absolute right-3 top-9">
-                <div className="w-4 h-4 border-2 border-gold-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            )}
-            
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute z-50 w-full mt-1 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
-                {suggestions.map((suggestion, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleAddressSelect(suggestion)}
-                    className="w-full text-left p-3 hover:bg-dark-700 transition-colors border-b border-dark-700 last:border-0"
-                  >
-                    <p className="text-sm text-white truncate">{suggestion.display_name}</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {suggestion.address?.city || suggestion.address?.town || suggestion.address?.village || ''}
-                      {suggestion.address?.country && `, ${suggestion.address.country}`}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
+          <input placeholder="Full Name" value={address.name} onChange={e => setAddress({...address, name: e.target.value})} className="input-dark" />
+          <input placeholder="Street Address" value={address.street} onChange={e => setAddress({...address, street: e.target.value})} className="input-dark" />
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">City</label>
-              <input
-                placeholder="City"
-                value={address.city}
-                onChange={e => setAddress({...address, city: e.target.value})}
-                className={`input-dark transition-all ${!address.city && error ? 'border-red-500' : ''}`}
-                autoComplete="address-level2"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">ZIP Code</label>
-              <input
-                placeholder="ZIP Code"
-                value={address.zip}
-                onChange={e => setAddress({...address, zip: e.target.value})}
-                className={`input-dark transition-all ${!address.zip && error ? 'border-red-500' : ''}`}
-                autoComplete="postal-code"
-              />
-            </div>
+            <input placeholder="City" value={address.city} onChange={e => setAddress({...address, city: e.target.value})} className="input-dark" />
+            <input placeholder="ZIP Code" value={address.zip} onChange={e => setAddress({...address, zip: e.target.value})} className="input-dark" />
           </div>
-
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Phone Number</label>
-            <input
-              placeholder="+1 234 567 8900"
-              value={address.phone}
-              onChange={e => setAddress({...address, phone: e.target.value})}
-              className={`input-dark transition-all ${!address.phone && error ? 'border-red-500' : ''}`}
-              autoComplete="tel"
-            />
-          </div>
-          
+          <input placeholder="Phone Number" value={address.phone} onChange={e => setAddress({...address, phone: e.target.value})} className="input-dark" />
           <div className="flex gap-3 mt-6">
-            <button onClick={() => { setStep(1); setError(''); }} className="btn-outline-gold flex-1 transition-all active:scale-95">
-              Back
-            </button>
-            <button onClick={() => { setStep(3); setError(''); setShowSuggestions(false); }} className="btn-gold flex-[2] transition-all active:scale-95">
-              Continue
-            </button>
+            <button onClick={() => setStep(1)} className="btn-outline-gold flex-1 transition-all active:scale-95">Back</button>
+            <button onClick={() => setStep(3)} className="btn-gold flex-[2] transition-all active:scale-95">Continue</button>
           </div>
         </div>
       )}
 
       {step === 3 && (
         <div className="space-y-4 animate-slide-up">
-          <h2 className="font-semibold text-white mb-4">Order Summary</h2>
+          <h2 className="font-semibold text-white mb-4">Payment & Summary</h2>
           
-          <div className="glass-card p-4 space-y-3">
-            {items.map((i, idx) => (
-              <div key={idx} className="flex justify-between text-sm">
-                <span className="text-gray-300 truncate flex-1 pr-2">
-                  {i.title} × {i.quantity}
-                  {i.color && <span className="text-gold-500"> ({i.color})</span>}
-                </span>
-                <span className="text-white font-semibold">${(i.price * i.quantity).toFixed(2)}</span>
+          {/* Payment Method Toggle */}
+          <div className="glass-card p-4">
+            <h3 className="text-sm font-semibold text-white mb-3">Select Payment Method</h3>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <button onClick={() => setPaymentMethod('card')} className={`p-3 rounded-xl border-2 transition-all flex items-center gap-2 ${paymentMethod === 'card' ? 'border-gold-500 bg-gold-500/10' : 'border-dark-600'}`}>
+                <svg className="w-5 h-5 text-gold-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                <span className="text-sm font-medium">Card</span>
+              </button>
+              <button onClick={() => setPaymentMethod('transfer')} className={`p-3 rounded-xl border-2 transition-all flex items-center gap-2 ${paymentMethod === 'transfer' ? 'border-gold-500 bg-gold-500/10' : 'border-dark-600'}`}>
+                <svg className="w-5 h-5 text-gold-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
+                <span className="text-sm font-medium">Transfer</span>
+              </button>
+            </div>
+
+            {paymentMethod === 'card' ? (
+              <div className="space-y-3 animate-fade-up">
+                <input placeholder="Card Number" value={cardDetails.number} onChange={e => setCardDetails({...cardDetails, number: e.target.value})} className="input-dark" maxLength={19} />
+                <div className="grid grid-cols-2 gap-3">
+                  <input placeholder="MM/YY" value={cardDetails.expiry} onChange={e => setCardDetails({...cardDetails, expiry: e.target.value})} className="input-dark" maxLength={5} />
+                  <input placeholder="CVC" value={cardDetails.cvc} onChange={e => setCardDetails({...cardDetails, cvc: e.target.value})} className="input-dark" maxLength={4} type="password" />
+                </div>
+                <input placeholder="Name on Card" value={cardDetails.name} onChange={e => setCardDetails({...cardDetails, name: e.target.value})} className="input-dark" />
               </div>
-            ))}
+            ) : (
+              <div className="bg-dark-700/50 rounded-xl p-4 space-y-2 text-sm animate-fade-up border border-dark-600">
+                <p className="text-gold-500 font-semibold">Bank Transfer Details</p>
+                <div className="flex justify-between"><span className="text-gray-400">Bank:</span><span className="text-white">Global Commerce Bank</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Account:</span><span className="text-white font-mono">8839 2019 4452</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Name:</span><span className="text-white">Shoper Marketplace LLC</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Reference:</span><span className="text-gold-500 font-mono">ORD-{Math.random().toString(36).substr(2, 6).toUpperCase()}</span></div>
+                <p className="text-xs text-gray-500 mt-2 pt-2 border-t border-dark-600">Your order will be marked as "Pending" until the transfer is verified by our team.</p>
+              </div>
+            )}
           </div>
           
           <div className="glass-card p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-400">Subtotal</span>
-              <span className="text-white">${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Shipping to {countryName}</span>
-              <span className="text-white">${shipping.toFixed(2)}</span>
-            </div>
+            <div className="flex justify-between"><span className="text-gray-400">Subtotal</span><span className="text-white">${subtotal.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Shipping</span><span className="text-white">${shipping.toFixed(2)}</span></div>
             <div className="border-t border-dark-600 my-2" />
-            <div className="flex justify-between text-base">
-              <span className="font-bold text-white">Total</span>
-              <span className="text-xl font-bold gold-text">${total.toFixed(2)}</span>
-            </div>
-          </div>
-
-          <div className="glass-card p-4">
-            <h3 className="text-xs font-semibold text-gold-500 uppercase mb-2">Delivery Address</h3>
-            <p className="text-sm text-white">{address.name}</p>
-            <p className="text-xs text-gray-400">{address.street}</p>
-            <p className="text-xs text-gray-400">{address.city}, {address.zip}</p>
-            <p className="text-xs text-gray-400">{countryName}</p>
-            <p className="text-xs text-gray-400 mt-1"> {address.phone}</p>
-          </div>
-
-          <div className="flex items-center justify-center gap-4 py-2">
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              <span>Secure Payment</span>
-            </div>
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-              </svg>
-              <span>Buyer Protection</span>
-            </div>
+            <div className="flex justify-between text-base"><span className="font-bold text-white">Total</span><span className="text-xl font-bold gold-text">${total.toFixed(2)}</span></div>
           </div>
 
           <div className="flex gap-3">
-            <button
-              onClick={() => setStep(2)}
-              disabled={loading}
-              className="btn-outline-gold flex-1 transition-all active:scale-95 disabled:opacity-50"
-            >
-              Back
-            </button>
-            <button
-              onClick={handlePlaceOrder}
-              disabled={loading}
-              className="btn-gold flex-[2] transition-all active:scale-95 disabled:opacity-50 relative overflow-hidden"
-            >
-              {loading ? (
+            <button onClick={() => setStep(2)} disabled={loading} className="btn-outline-gold flex-1 transition-all active:scale-95 disabled:opacity-50">Back</button>
+            <button onClick={handlePlaceOrder} disabled={loading || processingPayment} className="btn-gold flex-[2] transition-all active:scale-95 disabled:opacity-50 relative overflow-hidden">
+              {processingPayment ? (
                 <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                  </svg>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
                   Processing...
                 </span>
-              ) : 'Place Order'}
+              ) : 'Pay & Place Order'}
             </button>
           </div>
         </div>
