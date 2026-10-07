@@ -15,11 +15,8 @@ const COUNTRIES = [
   { code: 'IT', name: 'Italy', flag: '🇮🇹' },
   { code: 'ES', name: 'Spain', flag: '🇪🇸' },
   { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
-  { code: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: 'CN', name: 'China', flag: '🇨🇳' },
-  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
-  { code: 'MX', name: 'Mexico', flag: '🇲🇽' },
-  { code: 'RU', name: 'Russia', flag: '🇷🇺' },
+  { code: 'KR', name: 'South Korea', flag: '🇷' },
+  { code: 'MX', name: 'Mexico', flag: '🇽' },
 ];
 
 export default function Checkout() {
