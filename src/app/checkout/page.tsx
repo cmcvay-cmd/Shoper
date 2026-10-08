@@ -4,19 +4,20 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 const COUNTRIES = [
-  { code: 'US', name: 'United States', flag: '🇺🇸 ' },
-  { code: 'UK', name: 'United Kingdom', flag: '🇬🇧 ' },
-  { code: 'JP', name: 'Japan', flag: '🇯🇵 ' },
-  { code: 'DE', name: 'Germany', flag: '🇩🇪 ' },
-  { code: 'AU', name: 'Australia', flag: '🇦🇺 ' },
+  { code: 'US', name: 'United States', flag: '🇺🇸' },
+  { code: 'UK', name: 'United Kingdom', flag: '🇬🇧' },
+  { code: 'JP', name: 'Japan', flag: '🇯🇵' },
+  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
   { code: 'AE', name: 'UAE', flag: '🇦🇪' },
   { code: 'CA', name: 'Canada', flag: '🇨🇦' },
   { code: 'FR', name: 'France', flag: '🇫🇷' },
   { code: 'IT', name: 'Italy', flag: '🇮🇹' },
   { code: 'ES', name: 'Spain', flag: '🇪🇸' },
   { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
-  { code: 'KR', name: 'South Korea', flag: '🇰🇷 ' },
-  { code: 'MX', name: 'Mexico', flag: '🇲🇽 ' },
+  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
+  { code: 'MX', name: 'Mexico', flag: '🇲🇽' },
+  { code: 'NG', name: 'Nigeria', flag: '🇳' },
 ];
 
 export default function Checkout() {
@@ -162,11 +163,34 @@ export default function Checkout() {
           {bankDetails.length > 0 ? bankDetails.map((bank, idx) => (
             <div key={idx} className="glass-card p-4 space-y-2 text-sm">
               <p className="text-gold-500 font-semibold text-lg">{bank.bank_name}</p>
-              <div className="flex justify-between items-center py-2 border-b border-dark-700"><span className="text-gray-400">Account Number:</span><span className="text-white font-mono text-base">{bank.account_number}</span></div>
-              <div className="flex justify-between items-center py-2 border-b border-dark-700"><span className="text-gray-400">Account Name:</span><span className="text-white">{bank.account_name}</span></div>
-              {bank.swift_code && <div className="flex justify-between items-center py-2"><span className="text-gray-400">SWIFT Code:</span><span className="text-white font-mono">{bank.swift_code}</span></div>}
+              
+              {/* Routing Number Row */}
+              {bank.routing_number && (
+                <div className="flex justify-between items-center py-2 border-b border-dark-700">
+                  <span className="text-gray-400">Routing Number:</span>
+                  <span className="text-white font-mono text-base">{bank.routing_number}</span>
+                </div>
+              )}
+              
+              <div className="flex justify-between items-center py-2 border-b border-dark-700">
+                <span className="text-gray-400">Account Number:</span>
+                <span className="text-white font-mono text-base">{bank.account_number}</span>
+              </div>
+              
+              <div className="flex justify-between items-center py-2 border-b border-dark-700">
+                <span className="text-gray-400">Account Name:</span>
+                <span className="text-white">{bank.account_name}</span>
+              </div>
+              
+              {bank.swift_code && (
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-gray-400">SWIFT Code:</span>
+                  <span className="text-white font-mono">{bank.swift_code}</span>
+                </div>
+              )}
+              
               <div className="bg-gold-500/10 border border-gold-500/30 rounded-lg p-3 mt-3">
-                <p className="text-xs text-gold-500 font-semibold">️ Important:</p>
+                <p className="text-xs text-gold-500 font-semibold">⚠️ Important:</p>
                 <p className="text-xs text-gray-300 mt-1">Please use your Order ID as the transfer reference. Once sent, click the button below to notify us.</p>
               </div>
             </div>
