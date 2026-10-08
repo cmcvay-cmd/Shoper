@@ -17,7 +17,6 @@ const COUNTRIES = [
   { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
   { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
   { code: 'MX', name: 'Mexico', flag: '🇲🇽' },
-  { code: 'NG', name: 'Nigeria', flag: '🇳' },
 ];
 
 export default function Checkout() {
@@ -56,7 +55,8 @@ export default function Checkout() {
   }, []);
 
   const subtotal = items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-  const shipping = country ? (country === 'JP' || country === 'AE' || country === 'NG' ? 15 : 10) : 0;
+  // Updated shipping logic without Nigeria
+  const shipping = country ? (country === 'JP' || country === 'AE' ? 15 : 10) : 0;
   const total = subtotal + shipping;
 
   const handlePlaceOrder = async () => {
@@ -131,8 +131,8 @@ export default function Checkout() {
             {COUNTRIES.map(c => (
               <button key={c.code} onClick={() => { setCountry(c.code); setCountryName(c.name); setStep(2); }}
                 className={`glass-card p-4 text-left transition-all duration-200 hover:scale-105 active:scale-95 ${country === c.code ? 'border-gold-500 bg-gold-500/5' : ''}`}>
-                <span className="text-2xl">{c.flag}</span>
-                <p className="text-sm font-semibold text-white mt-2">{c.name}</p>
+                <span className="text-3xl block mb-2">{c.flag}</span>
+                <p className="text-sm font-semibold text-white">{c.name}</p>
               </button>
             ))}
           </div>
@@ -164,7 +164,6 @@ export default function Checkout() {
             <div key={idx} className="glass-card p-4 space-y-2 text-sm">
               <p className="text-gold-500 font-semibold text-lg">{bank.bank_name}</p>
               
-              {/* Routing Number Row */}
               {bank.routing_number && (
                 <div className="flex justify-between items-center py-2 border-b border-dark-700">
                   <span className="text-gray-400">Routing Number:</span>
