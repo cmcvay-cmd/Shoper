@@ -84,14 +84,24 @@ export default function Admin() {
     if (!e.target.files || e.target.files.length === 0) return;
     setUploading(true);
     const newUrls: string[] = [];
-    for (const file of Array.from(e.target.files)) {
+    const files = Array.from(e.target.files);
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
+      
       const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
-      if (uploadError) { alert('Upload failed: ' + uploadError.message); setUploading(false); return; }
+      if (uploadError) { 
+        alert('Upload failed: ' + uploadError.message); 
+        setUploading(false); 
+        return; 
+      }
+      
       const { data } = supabase.storage.from('products').getPublicUrl(fileName);
       if (data.publicUrl) newUrls.push(data.publicUrl);
     }
+    
     setImageUrls(prev => [...prev, ...newUrls]);
     setUploading(false);
   };
@@ -103,33 +113,88 @@ export default function Admin() {
     setFormLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { alert('Not logged in'); setFormLoading(false); return; }
-    const payload = { seller_id: user.id, title, description, price: parseFloat(price), category, stock: parseInt(stock), colors: colors ? colors.split(',').map(c => c.trim()) : [], images: imageUrls };
+    
+    const payload = { 
+      seller_id: user.id, 
+      title, 
+      description, 
+      price: parseFloat(price), 
+      category, 
+      stock: parseInt(stock), 
+      colors: colors ? colors.split(',').map(c => c.trim()) : [], 
+      images: imageUrls 
+    };
+    
     let error;
-    if (editingId) { const res = await supabase.from('products').update(payload).eq('id', editingId); error = res.error; } 
-    else { const res = await supabase.from('products').insert(payload); error = res.error; }
+    if (editingId) { 
+      const res = await supabase.from('products').update(payload).eq('id', editingId); 
+      error = res.error; 
+    } else { 
+      const res = await supabase.from('products').insert(payload); 
+      error = res.error; 
+    }
+    
     if (error) { alert('Error: ' + error.message); setFormLoading(false); return; }
+    
     alert(editingId ? 'Product updated!' : 'Product added!');
-    resetForm(); await loadData(); setActiveTab('products'); setFormLoading(false);
+    resetForm(); 
+    await loadData(); 
+    setActiveTab('products'); 
+    setFormLoading(false);
   };
 
-  const resetForm = () => { setTitle(''); setDescription(''); setPrice(''); setCategory(''); setStock(''); setColors(''); setImageUrls([]); setEditingId(null); };
-  const editProduct = (p: any) => { setTitle(p.title); setDescription(p.description || ''); setPrice(String(p.price)); setCategory(p.category); setStock(String(p.stock)); setColors((p.colors || []).join(', ')); setImageUrls(p.images || []); setEditingId(p.id); setActiveTab('add'); };
-  const deleteProduct = async (id: string) => { if (!confirm('Delete?')) return; await supabase.from('products').delete().eq('id', id); await loadData(); };
-  const updateOrderStatus = async (id: string, status: string) => { await supabase.from('orders').update({ status }).eq('id', id); await loadData(); };
-  const toggleUserRole = async (userId: string, currentRole: string) => { await supabase.from('profiles').update({ role: currentRole === 'admin' ? 'customer' : 'admin' }).eq('id', userId); await loadData(); };
+  const resetForm = () => { 
+    setTitle(''); setDescription(''); setPrice(''); setCategory(''); 
+    setStock(''); setColors(''); setImageUrls([]); setEditingId(null); 
+  };
+  
+  const editProduct = (p: any) => { 
+    setTitle(p.title); setDescription(p.description || ''); 
+    setPrice(String(p.price)); setCategory(p.category); 
+    setStock(String(p.stock)); setColors((p.colors || []).join(', ')); 
+    setImageUrls(p.images || []); setEditingId(p.id); setActiveTab('add'); 
+  };
+  
+  const deleteProduct = async (id: string) => { 
+    if (!confirm('Delete?')) return; 
+    await supabase.from('products').delete().eq('id', id); 
+    await loadData(); 
+  };
+  
+  const updateOrderStatus = async (id: string, status: string) => { 
+    await supabase.from('orders').update({ status }).eq('id', id); 
+    await loadData(); 
+  };
+  
+  const toggleUserRole = async (userId: string, currentRole: string) => { 
+    await supabase.from('profiles').update({ role: currentRole === 'admin' ? 'customer' : 'admin' }).eq('id', userId); 
+    await loadData(); 
+  };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-dark-900"><div className="w-12 h-12 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" /><p className="text-gold-500">Loading...</p></div>;
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-dark-900">
+      <div className="w-12 h-12 border-4 border-gold-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+      <p className="text-gold-500">Loading...</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-dark-900 pb-24">
       <div className="sticky top-0 z-30 bg-dark-900/95 backdrop-blur-xl border-b border-dark-700 px-4 py-4">
         <div className="flex items-center justify-between mb-3">
-          <div><h1 className="text-2xl font-bold gold-text">Admin Panel</h1><p className="text-xs text-gray-400">Manage your marketplace</p></div>
+          <div>
+            <h1 className="text-2xl font-bold gold-text">Admin Panel</h1>
+            <p className="text-xs text-gray-400">Manage your marketplace</p>
+          </div>
           <button onClick={() => router.push('/')} className="px-3 py-1.5 bg-dark-700 rounded-lg text-xs text-gray-300">← Store</button>
         </div>
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           {(['dashboard', 'products', 'add', 'orders', 'users', 'banking'] as AdminTab[]).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold capitalize transition-all ${activeTab === tab ? 'gold-gradient text-dark-900' : 'bg-dark-700 text-gray-400'}`}>
+            <button 
+              key={tab} 
+              onClick={() => setActiveTab(tab)} 
+              className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold capitalize transition-all ${activeTab === tab ? 'gold-gradient text-dark-900' : 'bg-dark-700 text-gray-400'}`}
+            >
               {tab === 'add' ? (editingId ? 'Edit' : '+ Add') : tab}
             </button>
           ))}
@@ -154,7 +219,9 @@ export default function Admin() {
               <h2 className="font-bold text-white">All Products ({products.length})</h2>
               <button onClick={() => { resetForm(); setActiveTab('add'); }} className="btn-gold text-xs py-2 px-4">+ Add New</button>
             </div>
-            {products.length === 0 ? <div className="glass-card p-10 text-center"><p className="text-gray-400">No products yet</p></div> : products.map(p => (
+            {products.length === 0 ? (
+              <div className="glass-card p-10 text-center"><p className="text-gray-400">No products yet</p></div>
+            ) : products.map(p => (
               <div key={p.id} className="glass-card p-3 flex gap-3">
                 <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-dark-700 flex-shrink-0">
                   {p.images?.[0] ? <Image src={p.images[0]} alt={p.title} fill className="object-cover" /> : <div className="flex items-center justify-center h-full text-gold-500/30 text-2xl">📦</div>}
@@ -187,7 +254,16 @@ export default function Admin() {
             <div className="glass-card p-4">
               <label className="block text-sm font-semibold text-white mb-3">Product Images</label>
               <input type="file" multiple accept="image/*" onChange={handleImageUpload} disabled={uploading} className="w-full text-sm text-gray-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-gold-500 file:text-dark-900 file:cursor-pointer disabled:opacity-50" />
-              {imageUrls.length > 0 && <div className="grid grid-cols-3 gap-2 mt-3">{imageUrls.map((url, idx) => (<div key={idx} className="relative h-24 rounded-lg overflow-hidden border border-dark-600"><Image src={url} alt="" fill className="object-cover" /><button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 w-6 h-6 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">✕</button></div>))}</div>}
+              {imageUrls.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  {imageUrls.map((url, idx) => (
+                    <div key={idx} className="relative h-24 rounded-lg overflow-hidden border border-dark-600">
+                      <Image src={url} alt="" fill className="object-cover" />
+                      <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 w-6 h-6 bg-red-500 rounded-full text-white text-xs flex items-center justify-center">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex gap-3">
               {editingId && <button type="button" onClick={() => { resetForm(); setActiveTab('products'); }} className="btn-outline-gold flex-1">Cancel</button>}
@@ -199,10 +275,15 @@ export default function Admin() {
         {activeTab === 'orders' && (
           <div className="space-y-3">
             <h2 className="font-bold text-white mb-3">All Orders ({orders.length})</h2>
-            {orders.length === 0 ? <div className="glass-card p-10 text-center"><p className="text-gray-400">No orders yet</p></div> : orders.map(o => (
+            {orders.length === 0 ? (
+              <div className="glass-card p-10 text-center"><p className="text-gray-400">No orders yet</p></div>
+            ) : orders.map(o => (
               <div key={o.id} className="glass-card p-4">
                 <div className="flex justify-between items-start mb-2">
-                  <div><p className="text-xs text-gray-500">#{o.id.slice(0, 8).toUpperCase()}</p><p className="text-[10px] text-gray-400">{new Date(o.created_at).toLocaleString()}</p></div>
+                  <div>
+                    <p className="text-xs text-gray-500">#{o.id.slice(0, 8).toUpperCase()}</p>
+                    <p className="text-[10px] text-gray-400">{new Date(o.created_at).toLocaleString()}</p>
+                  </div>
                   <span className="text-lg font-bold gold-text">${o.total_amount}</span>
                 </div>
                 <p className="text-xs text-gray-400 mb-3">📍 {o.country} • {(o.shipping_address as any)?.name || 'No address'}</p>
@@ -222,7 +303,10 @@ export default function Admin() {
             {users.map(u => (
               <div key={u.id} className="glass-card p-3 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full gold-gradient flex items-center justify-center text-dark-900 font-bold text-sm flex-shrink-0">{(u.full_name || u.email || '?')[0].toUpperCase()}</div>
-                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-white truncate">{u.full_name || 'User'}</p><p className="text-xs text-gray-400 truncate">{u.email || 'No email'}</p></div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{u.full_name || 'User'}</p>
+                  <p className="text-xs text-gray-400 truncate">{u.email || 'No email'}</p>
+                </div>
                 <button onClick={() => toggleUserRole(u.id, u.role || 'customer')} className={`px-3 py-1 rounded-lg text-[10px] font-semibold capitalize ${u.role === 'admin' ? 'bg-gold-500/20 border border-gold-500/30 text-gold-500' : 'bg-dark-700 text-gray-400 border border-dark-600'}`}>{u.role || 'customer'}</button>
               </div>
             ))}
@@ -241,7 +325,9 @@ export default function Admin() {
               <button type="submit" className="btn-gold w-full">Add Bank Account</button>
             </form>
 
-            {loadingBanking ? <div className="text-center py-8 text-gray-400">Loading...</div> : (
+            {loadingBanking ? (
+              <div className="text-center py-8 text-gray-400">Loading...</div>
+            ) : (
               <div className="space-y-3">
                 {bankDetails.map((bank) => (
                   <div key={bank.id} className="glass-card p-4">
@@ -251,10 +337,14 @@ export default function Admin() {
                         <p className="text-sm text-gray-400 font-mono">{bank.account_number}</p>
                         <p className="text-xs text-gray-500">{bank.account_name}</p>
                       </div>
-                      <span className={`text-xs px-2 py-1 rounded-full ${bank.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>{bank.is_active ? 'Active' : 'Inactive'}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${bank.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                        {bank.is_active ? 'Active' : 'Inactive'}
+                      </span>
                     </div>
                     <div className="flex gap-2 mt-3">
-                      <button onClick={() => toggleBankStatus(bank.id, bank.is_active)} className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded text-xs">{bank.is_active ? 'Deactivate' : 'Activate'}</button>
+                      <button onClick={() => toggleBankStatus(bank.id, bank.is_active)} className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded text-xs">
+                        {bank.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
                       <button onClick={() => deleteBank(bank.id)} className="px-3 py-1 bg-red-500/20 text-red-400 rounded text-xs">Delete</button>
                     </div>
                   </div>
